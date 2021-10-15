@@ -247,7 +247,20 @@ func resourceAlicloudWafDomainCreate(d *schema.ResourceData, meta interface{}) e
 func resourceAlicloudWafDomainRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	waf_openapiService := Waf_openapiService{client}
-	object, err := waf_openapiService.DescribeWafDomain(d.Id())
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	var object map[string]interface{}
+	var err error
+	err = resource.Retry(3*time.Minute, func() *resource.RetryError {
+		object, err = waf_openapiService.DescribeWafDomain(d.Id())
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
 	if err != nil {
 		if NotFoundError(err) {
 			log.Printf("[DEBUG] Resource alicloud_waf_domain waf_openapiService.DescribeWafDomain Failed!!! %s", err)
@@ -256,6 +269,7 @@ func resourceAlicloudWafDomainRead(d *schema.ResourceData, meta interface{}) err
 		}
 		return WrapError(err)
 	}
+
 	parts, err := ParseResourceId(d.Id(), 2)
 	if err != nil {
 		return WrapError(err)
